@@ -1,0 +1,61 @@
+name: checks
+
+# Guardrails that need no Unity license, so they can run on every push and PR.
+# The real Unity compile + scene validation still run locally in batch mode
+# before merging upward (see CLAUDE.md -> "QA & Merge Process") until a Unity
+# license is available for CI.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: C# language-level guard (project compiler is capped at C# 4.0)
+        run: |
+          set -e
+          fail=0
+          # Null-conditional operator, C# 6:  foo?.Bar / foo()?.Bar
+          if grep -rnE --include='*.cs' '[])A-Za-z0-9_]\?\.[A-Za-z_]' Assets; then
+            echo "::error::C# 6 null-conditional operator (?.) found - this project compiles as C# 4.0 (see CLAUDE.md, M1)"
+            fail=1
+          fi
+          # String interpolation, C# 6:  $"..." / $@"..."  (anchored so a regex '$"' end-anchor inside a string does not match)
+          if grep -rnE --include='*.cs' '(^|[[:space:](=,+:?])\$@?"' Assets; then
+            echo "::error::C# 6 string interpolation found - this project compiles as C# 4.0"
+            fail=1
+          fi
+          # nameof(), C# 6
+          if grep -rnE --include='*.cs' '\bnameof\(' Assets; then
+            echo "::error::C# 6 nameof() found - this project compiles as C# 4.0"
+            fail=1
+          fi
+          test "$fail" -eq 0
+          echo "C# language-level guard passed"
+
+      - name: Secret scan (credentials committed to source)
+        run: |
+          set -e
+          # Discord webhook URLs carry their auth token in the path. One was committed here in 2017
+          # and had to be scrubbed; this keeps it (or another) from coming back.
+          if grep -rnIE 'discord(app)?\.com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+' . --exclude-dir=.git; then
+            echo "::error::Discord webhook URL with token found in source"
+            exit 1
+          fi
+          echo "Secret scan passed"
+
+      - name: Required scenes present
+        run: |
+          set -e
+          test -f "Assets/Scenes/Launcher.unity"
+          test -f "Assets/Scenes/Playground.unity"
+          echo "Required scenes present"

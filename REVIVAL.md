@@ -21,9 +21,15 @@ Nothing has been opened in a real Unity Editor yet. That's the single next step.
 
 - **2026-08-29 (same day, continued)** — Fixed `EditorBuildSettings.asset` via a custom editor script run through Unity's CLI. This surfaced a correction: the long-standing note that `Playground.unity` was "missing from Build Settings" turned out to be wrong — nobody had verified it against the actual binary asset since the original repo scan. What was actually broken was more interesting: the real `Launcher.unity` scene was disabled, and a duplicate, `Launcher 1.unity`, was the one active in the build. Fixed to a clean, verified 2-scene list. Also renamed the GitHub repo `wulfram3` → `wulfram3-revival` and changed its default branch/description, so the repo itself reads as "active revival" rather than looking like the dormant original.
 
+- **2026-08-29 (same day, continued)** — Scene data repair, partially. A new diagnostic (`WulframSceneCheck`) found 18 missing script references in `Playground.unity`. Removing the broken slots worked once the real cause was found (the objects were prefab instances, which Unity's old prefab system silently un-edits on save unless disconnected first) — that half is done and committed. Re-attaching the `Cargo` component to the 17 affected objects did *not* reliably persist from Unity's command line no matter how it was sliced (four approaches, best 10 of 17, one made things worse), so that last step is being finished by hand in the Unity editor instead. Full account in `CLAUDE.md`.
+- **2026-08-29 (same day, continued)** — Process hardening. GitHub branch protection on `master` and `dev`: pull request required, the `checks` workflow must pass, no force-pushes or deletes, admins not exempt. Added a Unity-free CI workflow (`checks`) that blocks the exact C# 4.0 syntax bug class that broke the first compile, scans for committed Discord webhook credentials, and confirms the two required scenes exist. Testing that scan locally paid for itself immediately: it found two more commented-out copies of the 2017 leaked webhook (`Launcher.cs`, `LauncherWithLogin.cs`), now scrubbed. The webhook is still in public git history (this fork *and* upstream), so revoking it on Discord's side remains an open action for the owner. Two further audit findings (plaintext-HTTP login backend, unvalidated client RPCs) recorded as tracked items in `CLAUDE.md`.
+
 ## What's next
 
-Confirm the Build Settings fix actually works at runtime — nobody's pressed Play yet. After that, `feature/m2-photon-pun2-migration` (dead Photon endpoint, PUN Classic → PUN2) is the next real milestone: M2, a first local match between two clients.
+1. **Owner action:** revoke the leaked Discord webhook in Discord (Server Settings → Integrations → Webhooks). Nothing in the repo can fix this; it's been public since 2017.
+2. Finish the 17 `Cargo` re-attachments by hand in the Unity editor, then verify with `WulframSceneCheck` (0 missing scripts, exactly 17 `Cargo` components).
+3. Open a PR `feature/m1-scene-build-settings` → `revival/phase-0-1-bringup` to close out M1 (the new `checks` workflow gates it).
+4. Then `feature/m2-photon-pun2-migration`: fresh Photon Cloud app, PUN Classic → PUN2. That's M2 — a first local match between two clients.
 
 ## Maintenance note
 

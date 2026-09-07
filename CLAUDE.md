@@ -112,6 +112,23 @@ On `feature/m1-scene-build-settings` (commits `5400b5a`, `b3e4717`):
 - **Confirm the fixed Build Settings actually work end to end** — the fix itself is verified (before/after logged, zero new compile errors), but nobody has pressed Play or done a build yet to confirm the game boots into the right launcher and loads Playground correctly at runtime.
 - **Photon networking** — `PhotonServerSettings.asset` points at a dead AWS IP (`18.218.55.176`), no working App ID exists. Needs a fresh Photon Cloud app, and a PUN Classic → PUN2 migration (use Photon's official converter tool, don't hand-port).
 - **No real account/stats backend** — `OfflineMode` is a stopgap for local testing, not a long-term replacement for the dead `wulfram.com:1337` service. Current leaning: ship an accountless "quick play" mode first rather than building a replacement backend immediately.
+- **SECURITY — leaked Discord webhook is still live in public git history; revocation is USER ACTION, not done yet.** The URL (with its auth token) was removed from `DiscordApi.cs` earlier, and on 2026-08-29 two more commented-out copies were found and scrubbed from `Assets/Scenes/Launcher.cs` and `LauncherWithLogin.cs` (caught by the new CI secret scan while testing it locally). But it has been in git history since 2017 — in this fork *and* in upstream `Wulfram3/wulfram3`, both public repos — so no tree cleanup or history rewrite fully un-leaks it. **The only real fix: revoke/delete that webhook in Discord (Server Settings → Integrations → Webhooks) and create a new one if the feature is wanted.** Until the user confirms this is done, treat the credential as compromised.
+- **SECURITY — the original account backend used plaintext HTTP.** `UserController.cs` pointed at `http://wulfram.com:1337/` (not HTTPS): usernames/passwords would have crossed the wire unencrypted. Dead and bypassed now; any rebuilt backend must be HTTPS-only from day one.
+- **SECURITY — no server-side validation on client-sent RPCs.** Photon `PunRPC` handlers (`TakeDamage`, `SetContent`, cargo pickup/drop) trust whatever a client sends; a modified client can forge damage/kill/cargo values. Not a memory-safety issue (managed C#), but the real cheat vector for a revived multiplayer game. Needs a trust-model decision (master-client authority vs. validation) before any public playtest (M3) — not blocking M2.
+
+## QA & Merge Process (guardrails, set up 2026-08-29)
+
+- **Branch protection on GitHub:** `master` and `dev` require a pull request — no direct pushes, no force-pushes, no branch deletion, and admins are NOT exempt — and the `checks` workflow must pass before merge. `revival/phase-0-1-bringup` and `feature/*` still accept direct pushes so day-to-day work stays fast; CI runs on every push there too, for early signal.
+- **Automated checks — `.github/workflows/checks.yml`, every push and PR, no Unity license required:**
+  1. *C# language-level guard* — fails on C# 6+ syntax this project's C# 4.0 compiler rejects (`?.`, `$"..."`/`$@"..."`, `nameof(`). This is exactly the bug class that broke the first real compile attempt (M1).
+  2. *Secret scan* — fails on any Discord webhook URL with a token anywhere in the tree.
+  3. *Required scenes present* — `Assets/Scenes/Launcher.unity` and `Playground.unity` must exist.
+- **Not automated yet (needs a Unity license usable in CI):** the real Unity compile and `WulframSceneCheck` scene validation. Until then, run them locally in batch mode before any merge upward — commands are under Milestone Runway → M1.
+- **Definition of "verified" before merging upward:**
+  - `feature/*` → `revival/phase-0-1-bringup`: `checks` green **and** local batch compile 0 errors **and** `WulframSceneCheck` reports 0 missing scripts in both scenes.
+  - `revival/phase-0-1-bringup` → `dev`: all of the above **and** the milestone's own end-to-end proof (M1: opens/compiles/scenes clean; M2: two clients in one Photon room, damage lands both ways).
+  - `dev` → `master`: `dev` has been exercised by real play (closed playtest, M3) with no open blockers.
+- **Mechanics:** open a PR (`gh pr create`), wait for `checks`, merge (`gh pr merge`). A direct `git push` to `dev` or `master` is now rejected by GitHub — that is intentional.
 
 ## Working Preferences
 
